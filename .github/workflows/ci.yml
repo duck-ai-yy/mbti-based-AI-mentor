@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+
+# Cancel older runs on the same branch when a new commit comes in.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck · lint · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      # Lockfile may not exist on the very first commits. Once any agent
+      # commits pnpm-lock.yaml this step becomes deterministic.
+      - name: Install dependencies
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            echo "::warning::pnpm-lock.yaml missing — running unfrozen install. Commit the lockfile to lock deps."
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: TypeScript check
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+        env:
+          # Build must succeed without real secrets. Runtime API key is read
+          # at request time, not build time.
+          ANTHROPIC_API_KEY: ci-build-placeholder
+          NEXT_TELEMETRY_DISABLED: '1'
