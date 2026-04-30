@@ -1,12 +1,17 @@
 /**
  * Edge middleware — security headers + lightweight IP tracking.
- * OWNER: Agent D (can extend). Base implementation kept minimal on purpose.
+ * OWNER: Agent D.
+ *
+ * - CSP differs by NODE_ENV: dev needs 'unsafe-eval' for Next's HMR; prod
+ *   omits it. 'unsafe-inline' for scripts is left in for Next's runtime
+ *   inline bootstrap; revisit when we add nonce support.
+ * - Forwards client IP via X-Client-IP for the rate limiter.
+ * - Adds X-Request-ID per response for log correlation.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-const CSP_DEFAULT = [
+const SHARED_CSP_DIRECTIVES = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
@@ -14,15 +19,28 @@ const CSP_DEFAULT = [
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-].join('; ');
+];
+
+function buildCsp(isDev: boolean): string {
+  const scriptSrc = isDev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com"
+    : "script-src 'self' 'unsafe-inline' https://*.posthog.com";
+  return [scriptSrc, ...SHARED_CSP_DIRECTIVES].join('; ');
+}
+
+const IS_DEV = process.env.NODE_ENV !== 'production';
+const CSP = buildCsp(IS_DEV);
 
 export function middleware(req: NextRequest): NextResponse {
   const res = NextResponse.next();
-  res.headers.set('Content-Security-Policy', CSP_DEFAULT);
+
+  res.headers.set('Content-Security-Policy', CSP);
   res.headers.set(
     'X-Client-IP',
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown',
   );
+  res.headers.set('X-Request-ID', crypto.randomUUID());
+
   return res;
 }
 
