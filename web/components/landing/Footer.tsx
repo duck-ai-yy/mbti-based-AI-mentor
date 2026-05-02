@@ -16,7 +16,7 @@ export function Footer() {
           </p>
           <LeadCaptureForm />
           <p className="text-xs text-neutral-500">
-            或者扫码加微信，发"MBTI 学习"领 16 型 Prompt PDF：
+            或者扫码加微信，发&ldquo;MBTI 学习&rdquo;领 16 型 Prompt PDF：
           </p>
           <div
             role="img"
